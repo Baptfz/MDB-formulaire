@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Extraction GPS des photos</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+</head>
+<body style="font-family:sans-serif;padding:8px">
+<div id="msg">En attente d'une ligne…</div>
+<button id="all">Traiter toutes les lignes</button>
+<script>
+const msg = t => document.getElementById('msg').textContent = t;
+const attIds = v => Array.isArray(v) ? v.filter(x => typeof x === 'number') : [];
+
+async function gpsOf(attId) {
+  const {token, baseUrl} = await grist.docApi.getAccessToken({readOnly: true});
+  const r = await fetch(`${baseUrl}/attachments/${attId}/download?auth=${token}`);
+  return exifr.gps(await r.blob());          // {latitude, longitude} ou undefined
+}
+
+async function process(id, photo, lat) {
+  const ids = attIds(photo);
+  if (!ids.length || lat) return 'skip';
+  const g = await gpsOf(ids[0]);
+  if (!g) return 'nogps';
+  await grist.selectedTable.update({id, fields: {Latitude: g.latitude, Longitude: g.longitude}});
+  return 'ok';
+}
+
+grist.ready({requiredAccess: 'full'});
+
+grist.onRecord(async rec => {
+  try {
+    const s = await process(rec.id, rec.Photo, rec.Latitude);
+    msg(s === 'ok' ? 'Coordonnées enregistrées'
+      : s === 'nogps' ? 'Pas de GPS dans cette photo' : 'Rien à faire');
+  } catch (e) { msg('Erreur : ' + e.message); }
+});
+
+document.getElementById('all').onclick = async () => {
+  const t = await grist.fetchSelectedTable();
+  let ok = 0, nogps = 0;
+  for (let i = 0; i < t.id.length; i++) {
+    const s = await process(t.id[i], t.Photo[i], t.Latitude[i]);
+    if (s === 'ok') ok++;
+    if (s === 'nogps') nogps++;
+  }
+  msg(`${ok} lignes mises à jour, ${nogps} sans GPS`);
+};
+</script>
+</body>
+</html>
