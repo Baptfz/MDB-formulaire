@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partager ma position</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; max-width: 480px; margin-inline: auto; color: #222; }
+  h1 { font-size: 1.3rem; }
+  button { font-size: 1.1rem; padding: 14px 18px; border: 0; border-radius: 10px; background: #2d44b8; color: #fff; width: 100%; margin: 8px 0; }
+  button.secondary { background: #e8ebf8; color: #1f2f87; }
+  button:disabled { opacity: .5; }
+  #result { display: none; margin-top: 16px; padding: 14px; border: 1px solid #ccd; border-radius: 10px; background: #f7f8fd; }
+  #coords { font-size: 1.4rem; font-weight: 600; word-break: break-all; }
+  #acc { color: #555; font-size: .9rem; margin-top: 4px; }
+  #status { margin-top: 12px; min-height: 1.4em; }
+  .err { color: #b00020; }
+  .ok { color: #1b7a2f; }
+  a { color: #2d44b8; }
+</style>
+</head>
+<body>
+<h1>Partager ma position</h1>
+<p>1. Touchez le bouton et autorisez la localisation.<br>
+2. Touchez « Copier ».<br>
+3. Revenez au formulaire et collez dans le champ « Coordonnées GPS ».</p>
+
+<button id="get">📍 Obtenir ma position</button>
+
+<div id="result">
+  <div id="coords"></div>
+  <div id="acc"></div>
+  <button id="copy" class="secondary">📋 Copier les coordonnées</button>
+  <a id="map" target="_blank" rel="noopener">Vérifier sur la carte</a>
+</div>
+<div id="status" role="status"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let value = '';
+
+function setStatus(text, cls) {
+  const s = $('status');
+  s.textContent = text;
+  s.className = cls || '';
+}
+
+$('get').onclick = () => {
+  if (!('geolocation' in navigator)) {
+    setStatus("Votre navigateur ne permet pas la géolocalisation.", 'err');
+    return;
+  }
+  setStatus('Recherche de votre position…');
+  $('get').disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude.toFixed(6);
+      const lon = pos.coords.longitude.toFixed(6);
+      value = lat + ', ' + lon;
+      $('coords').textContent = value;
+      $('acc').textContent = 'Précision : environ ' + Math.round(pos.coords.accuracy) + ' m';
+      $('map').href = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lon + '#map=18/' + lat + '/' + lon;
+      $('result').style.display = 'block';
+      setStatus('');
+      $('get').disabled = false;
+      $('get').textContent = '📍 Actualiser ma position';
+    },
+    err => {
+      const msgs = {
+        1: "Localisation refusée. Autorisez-la dans les réglages du navigateur pour ce site, puis réessayez.",
+        2: "Position indisponible. Vérifiez que la localisation est activée sur votre téléphone.",
+        3: "Délai dépassé. Essayez à nouveau, de préférence à l'extérieur."
+      };
+      setStatus(msgs[err.code] || ('Erreur : ' + err.message), 'err');
+      $('get').disabled = false;
+    },
+    {enableHighAccuracy: true, timeout: 20000, maximumAge: 0}
+  );
+};
+
+$('copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus('Copié ! Revenez au formulaire et collez.', 'ok');
+  } catch (e) {
+    // Solution de repli : sélection manuelle du texte
+    const range = document.createRange();
+    range.selectNodeContents($('coords'));
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    try { document.execCommand('copy'); setStatus('Copié ! Revenez au formulaire et collez.', 'ok'); }
+    catch (e2) { setStatus('Copie automatique impossible : maintenez le doigt sur les coordonnées pour les copier.', 'err'); }
+  }
+};
+</script>
+</body>
+</html>
